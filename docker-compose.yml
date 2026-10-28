@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  # 1. ChirpStack v4 - LoRaWAN Network Server (LNS)
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    container_name: sdn_chirpstack
+    command: -c /etc/chirpstack
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # Web UI and gRPC API
+    volumes:
+      - ./config/chirpstack:/etc/chirpstack
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - REDIS_HOST=redis
+      - POSTGRESQL_HOST=postgres
+
+  # 2. ChirpStack Gateway Bridge - Semtech UDP Packet Forwarder listener
+  chirpstack-gateway-bridge:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    container_name: sdn_gateway_bridge
+    restart: unless-stopped
+    ports:
+      - "1700:1700/udp" # Listens for Semtech UDP packets from Laird Sentrius RG1
+    volumes:
+      - ./config/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+    depends_on:
+      - mosquitto
+
+  # 3. Eclipse Mosquitto - Local Southbound MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sdn_mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883" # Local MQTT port for ChirpStack and SDN Controller
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto-data:/mosquitto/data
+
+  # 4. Redis - In-Memory State Global Table
+  redis:
+    image: redis:7-alpine
+    container_name: sdn_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 5. PostgreSQL - ChirpStack Relational Storage
+  postgres:
+    image: postgres:14-alpine
+    container_name: sdn_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=chirpstack
+      - POSTGRES_PASSWORD=chirpstack
+      - POSTGRES_DB=chirpstack
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chirpstack"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+  mosquitto-data:

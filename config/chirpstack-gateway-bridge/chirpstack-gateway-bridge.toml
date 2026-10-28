@@ -1,0 +1,21 @@
+# ChirpStack Gateway Bridge Configuration for Laird Sentrius RG1
+[general]
+log_level = 4
+
+[integration.mqtt.auth.generic]
+servers = ["tcp://mosquitto:1883"]
+username = ""
+password = ""
+
+[integration.mqtt]
+event_topic_template = "gateway/{{ .GatewayID }}/event/{{ .EventType }}"
+state_topic_template = "gateway/{{ .GatewayID }}/state/{{ .StateType }}"
+command_topic_template = "gateway/{{ .GatewayID }}/command/{{ .CommandType }}"
+
+[backend]
+type = "semtech_udp"
+
+[backend.semtech_udp]
+# Listen on UDP 1700 for Semtech Packet Forwarder packets from Laird RG1
+udp_bind = "0.0.0.0:1700"
+skip_crc_check = false

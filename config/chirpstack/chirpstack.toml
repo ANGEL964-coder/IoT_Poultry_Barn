@@ -1,0 +1,32 @@
+# ChirpStack v4 Configuration File
+[network]
+net_id = "000000"
+enabled_regions = ["us915_0", "eu868"]
+
+[api]
+bind = "0.0.0.0:8080"
+# In production, replace with a secure 32+ character random secret
+secret = "sdn_lora_chirpstack_secret_key_change_in_production"
+
+[postgresql]
+dsn = "postgres://chirpstack:chirpstack@postgres/chirpstack?sslmode=disable"
+max_open_connections = 10
+min_idle_connections = 0
+
+[redis]
+servers = ["redis://redis:6379"]
+tls_enabled = false
+
+[gateway]
+client = { ca_cert = "", tls_cert = "", tls_key = "" }
+
+[integration]
+enabled = ["mqtt"]
+
+[integration.mqtt]
+server = "tcp://mosquitto:1883"
+json = true
+event_topic = "application/{{ .ApplicationID }}/device/{{ .DevEUI }}/event/{{ .EventType }}"
+command_topic = "application/{{ .ApplicationID }}/device/{{ .DevEUI }}/command/{{ .CommandType }}"
+clean_session = true
+client_id = "chirpstack_integration"

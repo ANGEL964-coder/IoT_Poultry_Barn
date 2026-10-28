@@ -1,7 +1,7 @@
 # ChirpStack v4 Configuration File
 [network]
 net_id = "000000"
-enabled_regions = ["us915_0", "eu868"]
+enabled_regions = ["us915_1"]
 
 [api]
 bind = "0.0.0.0:8080"

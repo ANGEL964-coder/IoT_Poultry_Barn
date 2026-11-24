@@ -38,6 +38,7 @@ def parse_int_auto_base(val: str) -> int:
 
 
 def build_chirpstack_v4_downlink_json(
+    dev_eui: str,
     base64_payload: str,
     f_port: int = 10,
     confirmed: bool = False
@@ -46,13 +47,10 @@ def build_chirpstack_v4_downlink_json(
     Constructs the JSON schema expected by ChirpStack v4 for queued downlinks.
     """
     payload_obj = {
-        "downlinks": [
-            {
-                "fPort": f_port,
-                "confirmed": confirmed,
-                "data": base64_payload
-            }
-        ]
+        "devEui": dev_eui,
+        "confirmed": confirmed,
+        "fPort": f_port,
+        "data": base64_payload
     }
     return json.dumps(payload_obj, indent=2)
 
@@ -132,6 +130,7 @@ Examples:
     # 5. Build ChirpStack Downlink Topic and JSON Payload
     topic = f"application/{args.app_id}/device/{dev_eui}/command/down"
     downlink_json = build_chirpstack_v4_downlink_json(
+        dev_eui=dev_eui,
         base64_payload=b64_payload,
         f_port=args.f_port,
         confirmed=args.confirmed

@@ -6,12 +6,12 @@
 
 | Parámetro | Valor a Configurar | Descripción |
 | :--- | :--- | :--- |
-| **IP de la Raspberry Pi** | **`10.227.26.23`** | IP local detectada en tu red LAN / Wi-Fi |
-| **IP a poner en el Gateway Laird RG1** | **`10.227.26.23`** | Campo *Server Address* en Semtech Packet Forwarder |
+| **IP actual de la Raspberry Pi** | **`10.77.225.23`** (o `100.101.226.92` vía Tailscale) | IP local detectada en interfaz `wlan0` (`hostname -I`) |
+| **IP a poner en el Gateway Laird RG1** | **`10.77.225.23`** | Campo *Server Address* en Semtech Packet Forwarder |
 | **Puertos UDP Gateway** | **`1700`** (Upstream y Downstream) | Puerto donde escucha `chirpstack-gateway-bridge` |
-| **Consola Web ChirpStack v4** | [http://10.227.26.23:8080](http://10.227.26.23:8080) | Usuario/Contraseña por defecto: `admin` / `admin` |
-| **Broker MQTT Mosquitto** | `10.227.26.23:1883` | Conexión local para el controlador SDN |
-| **Base de Datos Redis** | `10.227.26.23:6379` | Tabla Global de Estado de Nodos |
+| **Consola Web ChirpStack v4** | [http://10.77.225.23:8080](http://10.77.225.23:8080) | Usuario/Contraseña por defecto: `admin` / `admin` |
+| **Broker MQTT Mosquitto** | `10.77.225.23:1883` (o `localhost:1883`) | Conexión local para el controlador SDN |
+| **Base de Datos Redis** | `10.77.225.23:6379` (o `localhost:6379`) | Tabla Global de Estado de Nodos |
 
 ---
 
@@ -21,7 +21,7 @@
 2. Ve al menú **LoRa** -> **Forwarder**.
 3. Selecciona **Semtech Packet Forwarder**.
 4. Configura los siguientes campos:
-   * **Server Address:** `10.227.26.23`
+   * **Server Address:** `10.77.225.23` (la IP actual del servidor)
    * **Upstream Port:** `1700`
    * **Downstream Port:** `1700`
 5. Haz clic en **Save Changes** y luego en **Restart Forwarder**.
@@ -101,14 +101,15 @@ python3 src/edge/send_test_downlink.py \
 
 ## 6. Consultar el Estado del Nodo en Redis
 
-Para verificar en tiempo real los datos almacenados en memoria:
+Para verificar en tiempo real los datos almacenados en memoria (ejecutado vía Docker o mediante `redis-cli`):
 ```bash
-# Ver todos los campos del nodo
-redis-cli HGETALL nodo:0102030405060708
+# Ver todos los campos del nodo (ej. 70b3d57ed007985a)
+docker exec sdn_redis redis-cli HGETALL nodo:70b3d57ed007985a
 
 # Ver el historial de los últimos uplinks
-redis-cli LRANGE nodo:0102030405060708:history 0 5
+docker exec sdn_redis redis-cli LRANGE nodo:70b3d57ed007985a:history 0 5
 ```
+> Para ver la guía completa con filtros de RSSI, SNR, monitoreo en vivo y comandos de limpieza, consulta [CONSULTAS_REDIS.md](file:///home/server/CONTROLADOR_SDN/CONSULTAS_REDIS.md).
 
 ---
 
@@ -135,4 +136,30 @@ pio run -e heltec_v3_us915 --target upload
 
 # Abrir monitor serie a 115200 baudios
 pio device monitor -b 115200
+```
+
+---
+
+## 8. Dashboard Web Java (Spring Boot 3 + SCADA Avícola)
+
+El proyecto incluye un dashboard web interactivo para monitoreo en tiempo real de los galpones y control de plano SDN:
+
+* **URL Local:** [http://localhost:8085](http://localhost:8085)
+* **URL en Red LAN:** `http://<IP_RASPBERRY>:8085` (actualmente `http://10.153.116.23:8085`)
+* **Credenciales por defecto:**
+  * **Administrador (Control SDN + Monitoreo):** Usuario `admin` | Clave `server` (o `admin123`)
+  * **Operador (Solo Monitoreo):** Usuario `operador` | Clave `operador123` (o `server`)
+
+### Comandos de control:
+```bash
+cd /home/server/CONTROLADOR_SDN
+
+# Iniciar el Dashboard en segundo plano
+./iniciar_dashboard_java.sh
+
+# Detener el Dashboard
+./detener_dashboard_java.sh
+
+# Ver logs en vivo
+tail -f /home/server/CONTROLADOR_SDN/dashboard_java.log
 ```

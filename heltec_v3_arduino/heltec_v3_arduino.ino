@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
+#include <Preferences.h>
 
 #include "sdn_header.h"
 #include "heltec_v3_config.h"
@@ -34,6 +35,25 @@ static uint32_t last_tx_time_ms       = 0;
 static uint8_t telemetry_buffer[TELEMETRY_PAYLOAD_SIZE];
 static uint8_t rx_buffer[64];
 static size_t  rx_len = 0;
+
+// --- Persistencia DevNonce (evita "Invalid DevNonce" tras resets) ---
+Preferences lorawanPrefs;
+static uint16_t savedDevNonce = 0;
+
+void saveDevNonce(uint16_t nonce) {
+    lorawanPrefs.begin("lorawan", false);
+    lorawanPrefs.putUShort("devnonce", nonce);
+    lorawanPrefs.end();
+    savedDevNonce = nonce;
+}
+
+uint16_t loadDevNonce() {
+    lorawanPrefs.begin("lorawan", true);
+    uint16_t nonce = lorawanPrefs.getUShort("devnonce", 0);
+    lorawanPrefs.end();
+    savedDevNonce = nonce;
+    return nonce;
+}
 
 // Declaraciones de funciones
 void powerOnHeltecPeripherals();
@@ -92,6 +112,13 @@ void sendTelemetryUplink() {
                   current_tx_interval_s, current_sf, current_tx_power);
 
     rx_len = 0;
+    // Datarate dinamico segun current_sf (DR3 para SF7, DR2 para SF8, etc.)
+    uint8_t dr = 3;
+    if (current_sf == 8) dr = 2;
+    else if (current_sf == 9) dr = 1;
+    else if (current_sf >= 10) dr = 0;
+    node.setDatarate(dr);
+
     // Transmitir y escuchar en las ventanas de recepción RX1 y RX2
     int16_t state = node.sendReceive(
         telemetry_buffer,
@@ -267,9 +294,9 @@ void setup() {
         while (true) { delay(1000); }
     }
 
-    // 4. Configurar llaves OTAA
+    // 4. Configurar llaves OTAA (Para LoRaWAN 1.0.3 en RadioLib, el 3er parámetro debe ser NULL)
     Serial.println(F("[LORAWAN] Configurando llaves OTAA..."));
-    node.beginOTAA(LORAWAN_JOIN_EUI, LORAWAN_DEV_EUI, (uint8_t*)LORAWAN_NWK_KEY, (uint8_t*)LORAWAN_APP_KEY);
+    node.beginOTAA(LORAWAN_JOIN_EUI, LORAWAN_DEV_EUI, NULL, (uint8_t*)LORAWAN_APP_KEY);
 
     // Desactivar ADR automático para que las decisiones del controlador SDN manden
     node.setADR(false);
@@ -277,13 +304,62 @@ void setup() {
     // Establecer DR3 (SF7 en US915, necesario para paquete de 204 bytes)
     node.setDatarate(3);
 
-    // 5. Iniciar proceso de unión OTAA
-    Serial.println(F("[LORAWAN] Enviando Join-Request a ChirpStack..."));
-    state = node.activateOTAA();
-    if (state == RADIOLIB_LORAWAN_NEW_SESSION || state >= RADIOLIB_ERR_NONE) {
-        Serial.println(F("🎉 [LORAWAN] ¡UNIÓN EXITOSA (JOINED) CON CHIRPSTACK!"));
+    // --- Cargar DevNonce persistido para evitar "Invalid DevNonce" ---
+    uint16_t initialDevNonce = loadDevNonce();
+    if (initialDevNonce > 0) {
+        node.setDevNonce(initialDevNonce);
+        Serial.printf("[LORAWAN] DevNonce restaurado: %u\n", initialDevNonce);
     } else {
-        Serial.printf("[LORAWAN ERROR] Join falló con código: %d. Revisa DevEUI y AppKey.\n", state);
+        Serial.println(F("[LORAWAN] DevNonce inicial: 0 (primer join)"));
+    }
+
+    // 5. Iniciar proceso de unión OTAA (con reintentos y backoff exponencial)
+    Serial.println(F("[LORAWAN] Enviando Join-Request a ChirpStack..."));
+    const uint8_t MAX_JOIN_RETRIES = 10;
+    uint8_t joinRetry = 0;
+    uint16_t baseDelaySec = 10;
+
+    while (joinRetry < MAX_JOIN_RETRIES) {
+        joinRetry++;
+        Serial.printf("[LORAWAN] Intento Join %d/%d...\n", joinRetry, MAX_JOIN_RETRIES);
+
+        state = node.activateOTAA();
+
+        // Guardar DevNonce después de cada intento (RadioLib lo incrementa internamente)
+        uint16_t currentDevNonce = node.getDevNonce();
+        if (currentDevNonce > savedDevNonce) {
+            saveDevNonce(currentDevNonce);
+            Serial.printf("[LORAWAN] DevNonce actualizado y guardado: %u\n", currentDevNonce);
+        }
+
+        if (state == RADIOLIB_LORAWAN_NEW_SESSION || state >= RADIOLIB_ERR_NONE) {
+            Serial.println(F("🎉 [LORAWAN] ¡UNIÓN EXITOSA (JOINED) CON CHIRPSTACK!"));
+            // IMPORTANTE: activateOTAA() resetea el Datarate a DR0 (max 11 bytes en US915).
+            // Forzar DR3 (SF7 / 125 kHz, max 242 bytes) para permitir el paquete de 204 bytes:
+            node.setADR(false);
+            node.setDatarate(3);
+            break;
+        } else {
+            Serial.printf("[LORAWAN ERROR] Join falló con código: %d", state);
+            if (state == RADIOLIB_ERR_INVALID_NONCE) {
+                Serial.print(F(" (DevNonce inválido/duplicado)"));
+            }
+            Serial.println();
+
+            if (joinRetry < MAX_JOIN_RETRIES) {
+                // Backoff exponencial: 10s, 20s, 40s, 80s... (máx 5 min)
+                uint16_t delaySec = baseDelaySec * (1 << (joinRetry - 1));
+                if (delaySec > 300) delaySec = 300;
+                Serial.printf("[LORAWAN] Reintentando en %u segundos...\n", delaySec);
+                delay(delaySec * 1000);
+            }
+        }
+    }
+
+    if (joinRetry >= MAX_JOIN_RETRIES) {
+        Serial.println(F("[LORAWAN FATAL] Máximos reintentos agotados. Reiniciando en 60s..."));
+        delay(60000);
+        ESP.restart();
     }
 
     // 6. Primer envío de telemetría de 204 bytes

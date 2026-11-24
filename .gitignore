@@ -35,6 +35,38 @@ postgres-data/
 redis-data/
 mosquitto-data/
 
+# Java & Maven
+**/target/
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs & Databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Eclipse Paho MQTT runtime persistence
+**/sdn-*-backend-*/
+sdn-*-backend-*/
+*.lck
+
+# Pytest Cache
+.pytest_cache/
+
+# Compressed Archives & Backups
+*.zip
+*.rar
+*.tar.gz
+*.7z
+
+# Certificates and Private Keys
+*.key
+*.pem
+
 # OS files
 .DS_Store
 Thumbs.db

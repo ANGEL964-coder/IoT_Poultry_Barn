@@ -1,0 +1,48 @@
+.barn-viewport {
+    overflow: auto;
+    border: 1px solid var(--border-subtle, #E2E8F0);
+    border-radius: .75rem;
+    background: var(--primary-navy-dark, #0C233A);
+    overscroll-behavior-inline: contain;
+    cursor: grab;
+}
+.barn-viewport.is-dragging { cursor: grabbing; }
+.barn-viewport:focus-visible, .barn-node:focus-visible, .barn-control:focus-visible {
+    outline: 2px solid var(--accent-orange, #F7941D);
+    outline-offset: -2px;
+}
+.barn-scene {
+    position: relative;
+    width: 100%;
+    min-width: 550px;
+    aspect-ratio: 100 / 49;
+}
+.barn-scene canvas { position: absolute; width: 100%; height: 100%; }
+.barn-viewport { max-height: 430px; }
+.barn-control {
+    min-width: 2rem;
+    padding: .3rem .55rem;
+    border: 1px solid var(--border-subtle, #E2E8F0);
+    border-radius: .375rem;
+    background: var(--bg-card, #FFFFFF);
+    color: var(--text-main, #1A202C);
+}
+.barn-control:hover { background: #F1F5F9; border-color: var(--accent-orange, #F7941D); }
+.barn-status {
+    position: absolute;
+    left: 1rem;
+    bottom: .7rem;
+    right: 1rem;
+    color: var(--text-on-dark-muted, #CBD5E1);
+    font-size: .7rem;
+    pointer-events: none;
+}
+.barn-scene[data-layer="thermal"] .barn-node:not([data-barn-node="climate"]) { opacity: .55; }
+.barn-node:hover, .barn-node:focus-visible { opacity: 1 !important; }
+.barn-rf { display: none; margin-top: .3rem; color: var(--accent-orange, #F7941D); font: 10px ui-monospace, monospace; }
+.barn-scene[data-layer="rf"] .barn-rf { display: block; }
+
+@media (max-width: 640px) {
+    body > header > div { flex-wrap: wrap; gap: .5rem; }
+    body > header nav { order: 1; width: 100%; overflow-x: auto; white-space: nowrap; }
+}
